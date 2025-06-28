@@ -1,0 +1,6 @@
+python-telegram-bot[ext]>=20.0
+SQLAlchemy>=1.4
+paramiko>=2.7
+requests>=2.25
+apscheduler>=3.9
+python-dotenv>=0.19 
