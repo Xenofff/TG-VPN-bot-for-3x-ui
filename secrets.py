@@ -5,49 +5,47 @@
 # ==============================================================================
 
 # --- Telegram Bot ---
-BOT_TOKEN = "7852232714:AAHv10klHOS9IsJ1pT3kA9ZPosuOJeNB1-M"  # <-- ЗАПОЛНИТЕ: Получите у @BotFather
-ADMIN_USER_ID = 362529336                      # <-- ЗАПОЛНИТЕ: Ваш Telegram User ID для уведомлений об ошибках (0 для отключения)
-ADMIN_TELEGRAM_USERNAME = "Rias_Gremori" # Например, "xenoff" (без @)
-INSTRUCTION_LINK = "https://docs.google.com/document/d/1Cyzob_TdaVcXX0mxyvyhVFY_Dhk5-9I8b4DHnAvjwjg/edit?usp=sharing"
+BOT_TOKEN = "your_bot_token"  # <-- ЗАПОЛНИТЕ: Получите у @BotFather
+ADMIN_USER_ID = 000000000                      # <-- ЗАПОЛНИТЕ: Ваш Telegram User ID для уведомлений об ошибках (0 для отключения)
+ADMIN_TELEGRAM_USERNAME = "your_tg_username" # Например, "xenoff" (без @)
+INSTRUCTION_LINK = "https://your_link" #Ссылка на гайд по подключению, можно гуглдиск или телеграф
 
 # --- База данных ---
 DATABASE_URL = "sqlite:///vpn_bot.db"
 
 # --- Настройки 3x-ui API (для управления VLESS через API) ---
-# Панель находится на том же сервере, поэтому используем localhost
-# ВАЖНО: Укажите ваш порт и уникальный путь к панели, если они отличаются
-XUI_API_URL = "http://ip:port/path" # <-- УКАЖИТЕ ПРАВИЛЬНЫЙ URL ВАШЕЙ ПАНЕЛИ
-XUI_USERNAME = "username" # <-- ЗАПОЛНИТЕ: ВАШ ЛОГИН ОТ ПАНЕЛИ 3x-ui
-XUI_PASSWORD = "password" # <-- ЗАПОЛНИТЕ: ВАШ ПАРОЛЬ ОТ ПАНЕЛИ 3x-ui
-
-# --- Лимит ключей ---
+XUI_API_URL = "http://127.0.0.1:port/path" # <-- УКАЖИТЕ ПРАВИЛЬНЫЙ URL ВАШЕЙ ПАНЕЛИ, ЕСЛИ БОТ НА ТОМ ЖЕ СЕРВЕРЕ, ЧТО И ПАНЕЛЬ, ТО ОСТАВЛЯЕМ LOCALHOST, ИНАЧЕ ПРАВИЛЬНЫЙ IP ПАНЕЛИ
+XUI_USERNAME = "Login" #  ЛОГИН ОТ ПАНЕЛИ 3x-ui
+XUI_PASSWORD = "Password" #  ПАРОЛЬ ОТ ПАНЕЛИ 3x-ui
+XUI_SHADOWSOCKS_MASTER_KEY = "Your_secret_key" # МАСТЕР КЛЮЧ ДЛЯ SS
 MAX_KEYS_PER_USER = 4 # Максимальное количество ключей на одного пользователя
 
-# --- Серверы VPN ---
 SERVERS = [
     {
         "id": 1,                          # Уникальный ID сервера
-        "name": "VLESS Reality Server",
+	"name": "VLESS Reality Server",
         "region": "Германия 🚀",     # Название для пользователя
-        "ip": "255.255.255.255",      # <-- ВАЖНО: ВАШ ПУБЛИЧНЫЙ IP-адрес сервера! Не 127.0.0.1!
-        "protocols_available": ["vless"], # Оставляем только VLESS
+        "ip": "255.255.255.255",      # <-- ВАЖНО: ПУБЛИЧНЫЙ IP-адрес сервера! Не 127.0.0.1!
+        "protocols_available": ["vless"], 
 
         # --- Настройки VLESS через 3x-ui API (Для Reality) ---
-        "xui_vless_inbound_id": 1, # ID ВАШЕГО VLESS INBOUND В ПАНЕЛИ 3x-ui
-        "xui_vless_public_key": "S0zzIyqEjjI7c_Uqt8jWB5I2NF-7728TUp_4e9G4iXY", # ВАШ ПУБЛИЧНЫЙ КЛЮЧ REALITY
-        "xui_vless_sni": "wikiportal.su", # SNI ИЗ НАСТРОЕК REALITY
-        "xui_vless_short_id": "c17ec0dffa", # SHORT ID ИЗ НАСТРОЕК REALITY
-        "xui_vless_flow": "xtls-rprx-vision", # Опционально, если flow нужен в ссылке
+        "xui_vless_inbound_id": 1, # ID VLESS INBOUND В ПАНЕЛИ 3x-ui
+        "xui_vless_public_key": "your_public_key", #ВАШ ПУБЛИЧНЫЙ КЛЮЧ REALITY
+        "xui_vless_sni": "your_sni.com", # SNI ИЗ НАСТРОЕК REALITY
+        "xui_vless_short_id": "your_short_id", # SHORT ID ИЗ НАСТРОЕК REALITY
+        "xui_vless_flow": "xtls-rprx-vision", 
     },
 
 	# --- Настройки shadowsocks ---
 	{
-        "id": 2,
+        "id": 2, # ID этого сервера (должен быть уникальным)
         "name": "Shadowsocks Server",
-        "region": "Германия 🚀",
-        "ip": "255.255.255.255", # Публичный IP вашего сервера Shadowsocks (может быть тем же)
-        "xui_shadowsocks_inbound_id": 2, # ID Shadowsocks инбаунда в панели 3x-ui (индекс 2 в вашем config.json)
-        "xui_shadowsocks_method": "2022-blake3-aes-256-gcm", # Метод шифрования Shadowsocks из config.json
+	"region": "Германия 🚀",
+        "ip": "255.255.255.255", # Публичный IP сервера Shadowsocks (может быть тем же)
+
+        # Настройки Shadowsocks инбаунда
+        "xui_shadowsocks_inbound_id": 2, 
+        "xui_shadowsocks_method": "2022-blake3-aes-256-gcm", 
     }
 ]
 

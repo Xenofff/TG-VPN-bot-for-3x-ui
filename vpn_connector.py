@@ -9,7 +9,10 @@ import datetime
 import math
 import base64
 import asyncio
-
+import re
+import random
+import string
+from urllib.parse import quote
 import secrets # Импорт локального secrets.py для конфигураций
 from typing import Tuple, Union
 import uuid
@@ -326,98 +329,57 @@ async def _xui_add_vless_client(server_config: dict, user_telegram_id: int, user
 
 
 async def _xui_add_shadowsocks_client(server_config: dict, user_telegram_id: int, user_username: str | None, total_traffic_gb: Union[int, None] = None) -> Tuple[Union[str, None], Union[str, None]]:
-
     inbound_id = server_config.get("xui_shadowsocks_inbound_id")
-    if inbound_id is None:
-        logger.error(f"3x-ui Shadowsocks inbound ID not configured for server {server_config.get('id', 'Unknown')}.")
+    if inbound_id is None or not hasattr(secrets, 'XUI_SHADOWSOCKS_MASTER_KEY') or not secrets.XUI_SHADOWSOCKS_MASTER_KEY:
+        logger.error("Shadowsocks inbound_id or XUI_SHADOWSOCKS_MASTER_KEY is not configured in secrets.py.")
         return None, None
-
-    base_email_name = f"tg_{user_telegram_id}"
+    cleaned_username = ""
     if user_username:
-        cleaned_username = ''.join(c if c.isalnum() else '_' for c in user_username).lower()
-        base_email_name += f"_{cleaned_username}"
-
-    random_suffix_bytes = os.urandom(10)
-    random_suffix = base64.urlsafe_b64encode(random_suffix_bytes).decode('utf-8').rstrip('=') 
-
-    user_email = f"{base_email_name}_{random_suffix}@bot.local"
-
-    client_uuid = str(uuid.uuid4()) 
-
-    total_traffic_bytes = (total_traffic_gb * 1024 * 1024 * 1024) if total_traffic_gb is not None and total_traffic_gb > 0 else 0
-    
-    ss_password_bytes = os.urandom(16)
-    ss_password = base64.urlsafe_b64encode(ss_password_bytes).decode('utf-8').rstrip('=') 
-
-    ss_method = server_config.get("xui_shadowsocks_method")
-    if not ss_method:
-        logger.error(f"Shadowsocks method not configured in secrets.py for server {server_config.get('id', 'Unknown')}.")
-        return None, None
-
+        cleaned_username = re.sub(r'[^a-zA-Z0-9_]', '', user_username)
+    random_suffix = base64.urlsafe_b64encode(os.urandom(4)).decode('utf-8').rstrip('=')
+    user_tag = f"ss_{cleaned_username}_{user_telegram_id}_{random_suffix}"
+    raw_salt = os.urandom(32)
+    user_salt_b64 = base64.b64encode(raw_salt).decode('utf-8')
+    total_traffic_bytes = (total_traffic_gb * 1024 * 1024 * 1024) if total_traffic_gb else 0
     new_client_data = {
-        "id": client_uuid, 
-        "email": user_email,
+        "email": user_tag,
+        "method": "",
+        "password": user_salt_b64,
+        "id": str(uuid.uuid4()),
         "enable": True,
+        "limitIp": 0,
         "totalGB": total_traffic_bytes,
         "expiryTime": 0,
-        "limitIp": 0,
-        "method": ss_method, 
-        "password": ss_password, 
         "tgId": str(user_telegram_id),
         "subId": "",
         "comment": "",
         "reset": 0
     }
-    
     add_client_payload = {
         "id": inbound_id,
-        "settings": json.dumps({"clients": [new_client_data]}) 
+        "settings": json.dumps({"clients": [new_client_data]})
     }
-
-    add_client_path = "/panel/inbound/addClient" 
-    
-    logger.info(f"Attempting to add Shadowsocks client via 3x-ui API ({add_client_path}) for inbound {inbound_id}, email: {user_email}")
-    logger.debug(f"Payload for addClient: {add_client_payload}")
-
-    add_response_data = await _xui_api_request("POST", add_client_path, json_data=add_client_payload)
-
+    logger.info(f"Attempting to add SS client {user_tag} by providing a unique salt.")
+    add_response_data = await _xui_api_request("POST", "/panel/inbound/addClient", json_data=add_client_payload)
     if add_response_data and add_response_data.get("success"):
-        logger.info(f"Shadowsocks client added successfully via 3x-ui API. Email: {user_email}")
-
-        inbound_data_fresh = await _xui_api_request("GET", f"/panel/api/inbounds/get/{inbound_id}")
-
-        if not (inbound_data_fresh and inbound_data_fresh.get("success") and inbound_data_fresh.get("obj")):
-            logger.error(f"Failed to fetch inbound config {inbound_id} after adding client for link construction. Response: {inbound_data_fresh}")
-            return None, user_email
-
-        inbound_obj = inbound_data_fresh.get("obj")
-        
-        server_address = server_config.get('ip')
-        if not server_address:
-            logger.error(f"Server IP not found in secrets.SERVERS config for ID {server_config.get('id', 'Unknown')}!")
-            server_address = inbound_obj.get("host") # Fallback to inbound host
-            if not server_address:
-                logger.error(f"Could not find server address from inbound object or secrets.SERVERS for ID {server_config.get('id', 'Unknown')}.")
-                return None, user_email
-
-        inbound_port = inbound_obj.get("port")
-        if not inbound_port:
-            logger.error(f"Could not find inbound port for ID {inbound_id} in API response.")
-            return None, user_email
-
-        ss_credentials_raw = f"{ss_method}:{ss_password}"
-        encoded_credentials = base64.b64encode(ss_credentials_raw.encode('utf-8')).decode('utf-8').rstrip('=') 
-        
-        tag = user_email 
-
-        ss_link = f"ss://{encoded_credentials}@{server_address}:{inbound_port}#{tag}"
-
-        logger.info(f"Constructed Shadowsocks link for client {user_email}: {ss_link[:100]}...")
-        return ss_link, user_email
-
+        logger.info("Client added successfully via API.")
+        inbound_data = await _xui_api_request("GET", f"/panel/api/inbounds/get/{inbound_id}")
+        port = inbound_data.get("obj", {}).get("port")
+        address = server_config.get("ip")
+        ss_method_name = "2022-blake3-aes-256-gcm"
+        master_key = secrets.XUI_SHADOWSOCKS_MASTER_KEY
+        credential_string = f"{ss_method_name}:{master_key}:{user_salt_b64}"
+        encoded_credentials = base64.b64encode(credential_string.encode('utf-8')).decode('utf-8')
+        final_encoded_credentials = quote(encoded_credentials)
+        final_encoded_tag = quote(user_tag)
+        ss_link = f"ss://{final_encoded_credentials}@{address}:{port}#{final_encoded_tag}"
+        logger.info(f"Correct Shadowsocks key created: {ss_link[:80]}...")
+        return ss_link, user_tag
     else:
-        logger.error(f"Failed to add Shadowsocks client via 3x-ui API. Response: {add_response_data}. Full response: {json.dumps(add_response_data) if add_response_data else 'None'}")
-        return None, user_email
+        error_msg = add_response_data if add_response_data else "No response from panel."
+        logger.error(f"Failed to add SS client: {error_msg}")
+        return None, user_tag
+
 
 async def _xui_delete_vless_client(server_config: dict, client_email: str) -> bool:
     inbound_id = server_config.get("xui_vless_inbound_id")

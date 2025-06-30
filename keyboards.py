@@ -6,8 +6,8 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton("🔑 Получить ключ", callback_data="get_key_button")],
         [InlineKeyboardButton("📄 Мои ключи", callback_data="my_keys")],
-        [InlineKeyboardButton("❓ Инструкция по подключению", callback_data="instructions")], # Новая кнопка
-        [InlineKeyboardButton("👨‍💻 Связь с администратором", callback_data="contact_admin")], # Новая кнопка
+        [InlineKeyboardButton("❓ Инструкция по подключению", callback_data="instructions")],
+        [InlineKeyboardButton("👨‍💻 Связь с администратором", callback_data="contact_admin")], 
     ]
     return InlineKeyboardMarkup(keyboard)
 
