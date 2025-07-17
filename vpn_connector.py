@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import paramiko # Для Outline
-import sys 
+import sys
 import os
 import requests
 import json
@@ -26,7 +26,7 @@ _xui_session_cookie = None
 _xui_cookie_expiry = 0 # Метка времени истечения куки (или 0, если не задана)
 
 def _find_server_config(server_id: int) -> dict | None:
-    for server in secrets.SERVERS: 
+    for server in secrets.SERVERS:
         if server.get("id") == server_id:
             return server
     return None
@@ -35,7 +35,7 @@ async def execute_ssh_command(server_config: dict, command: str) -> Tuple[int, s
     client = None
     try:
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy()) 
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         hostname = server_config.get('ip')
         port = server_config.get('vless_ssh_port', 22)
@@ -85,7 +85,7 @@ async def execute_ssh_command(server_config: dict, command: str) -> Tuple[int, s
 
 
 async def _get_xui_session() -> Union[str, None]:
-    global _xui_session_cookie, _xui_cookie_expiry
+    global _xui_session_cookie, _xui_cookie_expiry # Moved to the top
 
     if _xui_session_cookie and _xui_cookie_expiry > time.time() + 60:
         logger.debug("Using existing 3x-ui session cookie.")
@@ -96,34 +96,34 @@ async def _get_xui_session() -> Union[str, None]:
         return None
 
     login_url = f"{secrets.XUI_API_URL}/login"
-    
+
     login_data = {
         "username": secrets.XUI_USERNAME,
         "password": secrets.XUI_PASSWORD
     }
-    
+
     headers = {'Content-Type': 'application/json'}
 
-    logger.info(f"Attempting to log in to 3x-ui panel via POST at {login_url} with username: {secrets.XUI_USERNAME} (password hidden)...") 
+    logger.info(f"Attempting to log in to 3x-ui panel via POST at {login_url} with username: {secrets.XUI_USERNAME} (password hidden)...")
 
     try:
         response = requests.post(login_url, headers=headers, json=login_data, verify=False, timeout=15)
-        response.raise_for_status() 
-        response_json = {} 
+        response.raise_for_status()
+        response_json = {}
         try:
             response_json = response.json()
         except json.JSONDecodeError:
             logger.error(f"Failed to decode JSON from 3x-ui login response. Status: {response.status_code}. Raw response body: {response.text[:500]}...")
             return None
-        
+
         if response_json.get("success"):
             session_cookie_data = response.cookies.get('session') or response.cookies.get('3x-ui')
 
             if session_cookie_data is not None:
                 cookie_name = '3x-ui' if '3x-ui' in response.cookies else 'session'
                 _xui_session_cookie = f"{cookie_name}={session_cookie_data}"
-                _xui_cookie_expiry = time.time() + 3600 
-                
+                _xui_cookie_expiry = time.time() + 3600
+
                 try:
                     for cookie in response.cookies:
                         if cookie.name == cookie_name:
@@ -157,6 +157,8 @@ async def _get_xui_session() -> Union[str, None]:
         return None
 
 async def _xui_api_request(method: str, path: str, json_data: dict | None = None) -> dict | None:
+    global _xui_session_cookie, _xui_cookie_expiry # Added global declaration here
+
     session_cookie = await _get_xui_session()
     if not session_cookie:
         logger.error("Failed to get 3x-ui session cookie for API request. Aborting.")
@@ -164,7 +166,7 @@ async def _xui_api_request(method: str, path: str, json_data: dict | None = None
     url = f"{secrets.XUI_API_URL}{path}"
     headers = {
         'Content-Type': 'application/json',
-        'Cookie': session_cookie 
+        'Cookie': session_cookie
     }
 
     try:
@@ -177,7 +179,6 @@ async def _xui_api_request(method: str, path: str, json_data: dict | None = None
         logger.error(f"HTTP error during 3x-ui API request {method} {path}: {e.response.status_code} - {e.response.text}")
         if e.response.status_code == 401:
             logger.warning("3x-ui API returned 401 Unauthorized. Clearing session cookie.")
-            global _xui_session_cookie, _xui_cookie_expiry
             _xui_session_cookie = None
             _xui_cookie_expiry = 0
         return None
@@ -191,8 +192,8 @@ async def _xui_api_request(method: str, path: str, json_data: dict | None = None
 async def _xui_get_inbound_clients(inbound_id: int) -> list[dict] | None:
 
     get_inbound_path = f"/panel/api/inbounds/get/{inbound_id}"
-    max_retries = 5 
-    retry_delay_sec = 2 
+    max_retries = 5
+    retry_delay_sec = 2
 
     for attempt in range(max_retries):
         inbound_data = await _xui_api_request("GET", get_inbound_path)
@@ -205,22 +206,22 @@ async def _xui_get_inbound_clients(inbound_id: int) -> list[dict] | None:
                 return clients
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse JSON settings for inbound {inbound_id} (Attempt {attempt + 1}/{max_retries}).")
-                return [] 
+                return []
             except Exception as e:
                 logger.error(f"An unexpected error occurred while getting clients for inbound {inbound_id} (Attempt {attempt + 1}/{max_retries}): {e}", exc_info=True)
-                return [] 
+                return []
         else:
             error_msg = inbound_data.get("msg", "") if inbound_data else "Unknown error"
             logger.warning(f"Failed to fetch inbound config {inbound_id} (Attempt {attempt + 1}/{max_retries}). Response: {inbound_data}. Message: {error_msg}")
-            
+
             if "database is locked" in error_msg.lower() and attempt < max_retries - 1:
                 logger.info(f"Database locked, retrying in {retry_delay_sec} seconds...")
-                await asyncio.sleep(retry_delay_sec) 
+                await asyncio.sleep(retry_delay_sec)
             else:
                 logger.info(f"Failed to get existing clients for inbound {inbound_id} after {attempt + 1} attempts. Returning empty list to proceed with new key creation.")
                 return []
     logger.error(f"All {max_retries} attempts failed to fetch inbound clients for inbound {inbound_id}. Returning empty list.")
-    return [] 
+    return []
 
 
 async def _xui_add_vless_client(server_config: dict, user_telegram_id: int, user_username: str | None, total_traffic_gb: Union[int, None] = None) -> Tuple[Union[str, None], Union[str, None]]:
@@ -233,13 +234,13 @@ async def _xui_add_vless_client(server_config: dict, user_telegram_id: int, user
     if user_username:
         cleaned_username = ''.join(c if c.isalnum() else '_' for c in user_username).lower()
         base_email_name += f"_{cleaned_username}"
-    
+
     random_suffix_bytes = os.urandom(10)
-    random_suffix = base64.urlsafe_b64encode(random_suffix_bytes).decode('utf-8').rstrip('=') 
+    random_suffix = base64.urlsafe_b64encode(random_suffix_bytes).decode('utf-8').rstrip('=')
 
     user_email = f"{base_email_name}_{random_suffix}@bot.local"
-        
-    client_uuid = str(uuid.uuid4()) 
+
+    client_uuid = str(uuid.uuid4())
 
     total_traffic_bytes = (total_traffic_gb * 1024 * 1024 * 1024) if total_traffic_gb is not None and total_traffic_gb > 0 else 0
 
@@ -251,19 +252,19 @@ async def _xui_add_vless_client(server_config: dict, user_telegram_id: int, user
         "expiryTime": 0,
         "limitIp": 0,
         "flow": server_config.get("xui_vless_flow", ""),
-        "tgId": str(user_telegram_id), 
-        "subId": "", 
-        "comment": "", 
+        "tgId": str(user_telegram_id),
+        "subId": "",
+        "comment": "",
         "reset": 0
     }
 
     add_client_payload = {
         "id": inbound_id,
-        "settings": json.dumps({"clients": [new_client_data]}) 
+        "settings": json.dumps({"clients": [new_client_data]})
     }
 
-    add_client_path = "/panel/inbound/addClient" 
-    
+    add_client_path = "/panel/inbound/addClient"
+
     logger.info(f"Attempting to add VLESS client via 3x-ui API ({add_client_path}) for inbound {inbound_id}, email: {user_email}")
     logger.debug(f"Payload for addClient: {add_client_payload}")
 
@@ -279,11 +280,11 @@ async def _xui_add_vless_client(server_config: dict, user_telegram_id: int, user
             return None, user_email
 
         inbound_obj = inbound_data_fresh.get("obj")
-        
+
         server_address = server_config.get('ip')
         if not server_address:
             logger.error(f"Server IP not found in secrets.SERVERS config for ID {server_config.get('id', 'Unknown')}!")
-            server_address = inbound_obj.get("host") 
+            server_address = inbound_obj.get("host")
             if not server_address:
                 logger.error(f"Could not find server address from inbound object or secrets.SERVERS for ID {server_config.get('id', 'Unknown')}.")
                 return None, user_email
@@ -297,28 +298,32 @@ async def _xui_add_vless_client(server_config: dict, user_telegram_id: int, user
         sni = server_config.get("xui_vless_sni")
         short_id = server_config.get("xui_vless_short_id")
         vless_flow = server_config.get("xui_vless_flow")
+        fingerprint = server_config.get("xui_vless_fingerprint") # Получаем fingerprint из secrets.py
 
-        if not all([public_key, sni, short_id]):
-            logger.error(f"Missing Reality parameters (public_key, sni, or short_id) in secrets.py for server {server_config.get('id', 'Unknown')}. Cannot construct Reality link.")
+        if not all([public_key, sni, short_id, fingerprint]): # Добавляем fingerprint в проверку
+            logger.error(f"Missing Reality parameters (public_key, sni, short_id, or fingerprint) in secrets.py for server {server_config.get('id', 'Unknown')}. Cannot construct Reality link.")
             return None, user_email
 
         params = {
+            "type": "tcp", # Добавлено: Явно указываем тип транспорта
             "security": "reality",
+            "flow": vless_flow, # Перемещено сюда для консистентности
             "sni": sni,
             "pbk": public_key,
             "sid": short_id,
+            "fp": fingerprint, # Добавлено: Fingerprint
+            "spx": "/", # Добавлено: Service Path (url-encoded %2F)
         }
-        if vless_flow:
-            params["flow"] = vless_flow
 
-        query_string_params = "&".join([f"{k}={v}" for k, v in params.items() if v is not None and v != ""])
+        # Фильтруем пустые параметры и формируем строку запроса
+        query_string_params = "&".join([f"{k}={quote(str(v))}" for k, v in params.items() if v is not None and v != ""])
 
-        tag = user_email
+        tag = user_email # Используем user_email как тег
 
         vless_link = f"vless://{client_uuid}@{server_address}:{inbound_port}"
         if query_string_params:
             vless_link += f"?{query_string_params}"
-        vless_link += f"#{tag}"
+        vless_link += f"#{quote(tag)}" # Используем quote для тега
 
         logger.info(f"Constructed VLESS Reality link for client {user_email}: {vless_link[:100]}...")
         return vless_link, user_email
@@ -483,7 +488,7 @@ async def create_key(server_id: int, protocol: str, user_telegram_id: int, user_
         if user_username:
             cleaned_username = ''.join(c if c.isalnum() else '_' for c in user_username).lower()
             key_name += f"_{cleaned_username}"
-        key_name += f"_{int(time.time())}" 
+        key_name += f"_{int(time.time())}"
 
         logger.info(f"Creating Outline key via API: {outline_api_url}")
         try:
@@ -528,7 +533,7 @@ async def create_key(server_id: int, protocol: str, user_telegram_id: int, user_
             logger.error(f"Failed to create VLESS key via 3x-ui API for server {server_id}.")
             return None, key_identifier if key_identifier else None
 
-    elif protocol == "shadowsocks": 
+    elif protocol == "shadowsocks":
         inbound_id = server_config.get("xui_shadowsocks_inbound_id")
         if inbound_id is None:
             logger.error(f"3x-ui Shadowsocks inbound ID not configured for server {server_id}. Cannot create Shadowsocks key via API.")
@@ -575,7 +580,7 @@ async def delete_key(server_id: int, protocol: str, key_identifier: str, key_dat
             response = requests.delete(f"{outline_api_url}/access-keys/{target_key_id}", verify=False, timeout=15)
             response.raise_for_status()
 
-            if response.status_code == 204: 
+            if response.status_code == 204:
                 logger.info(f"Outline key {key_identifier} deleted successfully via API.")
                 return True
         except ValueError:
@@ -584,7 +589,7 @@ async def delete_key(server_id: int, protocol: str, key_identifier: str, key_dat
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
                 logger.warning(f"Outline key {key_identifier} not found on the server (already deleted?). Status: 404")
-                return True 
+                return True
             else:
                 logger.error(f"HTTP error during Outline key deletion {key_identifier}: {e.response.status_code} - {e.response.text}")
                 return False
